@@ -9,15 +9,22 @@
     "jobiak-ops": "./cli.js"
   },
   "scripts": {
-    "start": "node cli.js serve",
-    "serve": "node cli.js serve",
-    "dev": "node --watch cli.js serve",
-    "dev:pretty": "node --watch cli.js serve | npx pino-pretty",
-    "views": "node cli.js views",
-    "updates": "node cli.js updates",
-    "expires": "node cli.js expires",
-    "feed": "node cli.js feed",
-    "pipeline": "node cli.js pipeline"
+    "start": "node api.js",
+    "api": "node api.js",
+    "dev": "node --watch api.js",
+    "dailystats": "node scripts/dailystats.js",
+    "whatjobs": "node scripts/whatjobs.js",
+    "jobget": "node scripts/jobget.js",
+    "banana": "node scripts/banana.js",
+    "collision": "node scripts/collision.js",
+    "dedup": "node scripts/dedup.js",
+    "keywords": "node scripts/keywords.js",
+    "indexing": "node scripts/indexingAudit.js",
+    "views": "node scripts/views.js",
+    "updates": "node scripts/updates.js",
+    "expires": "node scripts/expires.js",
+    "feed": "node scripts/feed.js",
+    "pipeline": "node scripts/pipeline.js"
   },
   "dependencies": {
     "commander": "^12.1.0",

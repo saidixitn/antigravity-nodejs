@@ -83,8 +83,10 @@ app.get("/api/uri/:domain", async (req, res) => {
     if (!uri) {
       return res.status(404).json({ error: `No URI found for domain '${domain}' in mongo_creds.creds` });
     }
-    // Mask password for safe display
-    const masked = uri.replace(/\/\/[^:]+:([^@]+)@/, "//***:***@");
+    // Mask credentials and IP for zero disclosure in responses
+    const masked = uri
+      .replace(/\/\/[^:]+:[^@]+@/, "//***:***@")
+      .replace(/@\b(?!(?:127\.0\.0\.1|localhost)\b)(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b/, "@<cluster-host>");
     res.json({ domain, uri: masked, resolved: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
