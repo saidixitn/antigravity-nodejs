@@ -4,6 +4,7 @@
  * ========================================================
  * Run any multi-tenant task directly from terminal or cron:
  *   node cli.js views --lead tarun
+ *   node cli.js collision [clientName]
  *   node cli.js gpd audit [--client <name>]
  *   node cli.js gpd clean [--client <name>] [--commit]
  *   node cli.js revenue <whatjobs|jobget|banana|all>
@@ -29,6 +30,7 @@ import { listGxcCollections, runGxcCompare } from "./scripts/gxc.js";
 import { runQrmAudit, runHcsgAudit } from "./scripts/clientFixer.js";
 import { runGpdAudit, runGpdClean } from "./scripts/gpd.js";
 import { cleanJobDescription, validateJobPostingSchema } from "./core/gfjSchema.js";
+import { runCollisionCheck } from "./scripts/collision.js";
 
 const program = new Command();
 
@@ -96,7 +98,21 @@ program
     await runPipeline();
   });
 
-// 6. GPD Operations (Google Programmatic Distribution)
+// 6. Pre-Posting Ingestion Collision Gate
+program
+  .command("collision [clientName]")
+  .description("Pre-posting collision detection (staging uniqueKey vs prod clientJobId)")
+  .option("-l, --limit <number>", "Limit candidate uniqueKeys scanned", "5000")
+  .action(async (clientName, opts) => {
+    try {
+      const res = await runCollisionCheck(clientName, { limit: parseInt(opts.limit, 10) });
+      console.table(res);
+    } finally {
+      await mongo.close();
+    }
+  });
+
+// 7. GPD Operations (Google Programmatic Distribution)
 program
   .command("gpd <action>")
   .description("GPD Quality & Description Hygiene: audit, clean")
@@ -119,7 +135,7 @@ program
     }
   });
 
-// 7. Schema Test Validator
+// 8. Schema Test Validator
 program
   .command("schema:validate <title> <description>")
   .description("Test description cleaning & Google for Jobs schema compliance")
@@ -134,7 +150,7 @@ program
     if (validation.errors.length) console.log("Errors:", validation.errors);
   });
 
-// 8. Revenue Operations (WhatJobs, JobGet, Banana)
+// 9. Revenue Operations (WhatJobs, JobGet, Banana)
 program
   .command("revenue <action>")
   .description("Execute partner revenue sync: whatjobs, jobget, banana, all")
@@ -161,7 +177,7 @@ program
     }
   });
 
-// 9. Stats & Clicks Telemetry
+// 10. Stats & Clicks Telemetry
 program
   .command("stats <action>")
   .description("Query cluster stats & clicks: daily, clicks, topost")
@@ -186,7 +202,7 @@ program
     }
   });
 
-// 10. GXC Feed Intelligence
+// 11. GXC Feed Intelligence
 program
   .command("gxc <action>")
   .description("GXC syndication feed operations: list, compare")
@@ -211,7 +227,7 @@ program
     }
   });
 
-// 11. Client Operations & Fixers
+// 12. Client Operations & Fixers
 program
   .command("client <clientName>")
   .description("Run client-specific diagnostics and scrubbing: qrm, hcsg")
@@ -232,7 +248,7 @@ program
     }
   });
 
-// 12. Ping
+// 13. Ping
 program
   .command("ping <dbName>")
   .description("Measure latency to any MongoDB database cluster")
@@ -247,7 +263,7 @@ program
     }
   });
 
-// 13. Serve API
+// 14. Serve API
 program
   .command("serve")
   .description("Start the REST API server")

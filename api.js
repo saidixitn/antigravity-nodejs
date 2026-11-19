@@ -19,6 +19,7 @@ import { runWhatJobsSync, runJobGetSync, runBananaSync, runAllRevenue } from "./
 import { runDailyStats, runClicksReport, runToPostCheck } from "./scripts/stats.js";
 import { listGxcCollections, runGxcCompare } from "./scripts/gxc.js";
 import { runGpdAudit, runGpdClean } from "./scripts/gpd.js";
+import { runCollisionCheck } from "./scripts/collision.js";
 import { cleanJobDescription, validateJobPostingSchema } from "./core/gfjSchema.js";
 
 const app = express();
@@ -79,6 +80,16 @@ app.get("/api/feed/summary", async (req, res) => {
   try {
     const summary = await runFeedReconciliation();
     res.json({ success: true, count: summary.length, data: summary });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 5. Pre-Posting Ingestion Collision Gate
+app.post("/api/run/collision", async (req, res) => {
+  try {
+    const report = await runCollisionCheck(req.body.client, { limit: req.body.limit });
+    res.json({ success: true, count: report.length, data: report });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
