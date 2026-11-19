@@ -1,0 +1,49 @@
+### =============================================================================
+### Antigravity Node.js - Localhost API Testing (REST Client)
+### =============================================================================
+### Instructions:
+### In VS Code / Antigravity with the "REST Client" extension installed,
+### click "Send Request" above any block to execute the request immediately.
+### =============================================================================
+
+@baseUrl = http://localhost:4000
+
+### 1. Health Check & Primary Mongo Cluster Latency
+GET {{baseUrl}}/health
+
+### 2. Measure Round-Trip Latency to Any Tenant Database
+GET {{baseUrl}}/api/ping/prod_jobiak_ai
+
+### 3. List All Configured Multi-Tenant Clients
+GET {{baseUrl}}/api/clients
+
+### 4. Trigger Feed Reconciliation (Dry-run or Audit)
+GET {{baseUrl}}/api/feed/summary
+
+### 5. Trigger Monthly Unique Views Report (Tarun's Portfolio)
+POST {{baseUrl}}/api/run/views
+Content-Type: application/json
+
+{
+  "lead": "tarun"
+}
+
+### 6. Trigger Sliding-Window Job Updates (7 Days)
+POST {{baseUrl}}/api/run/updates
+Content-Type: application/json
+
+{
+  "days": 7
+}
+
+### 7. Trigger Zero-Click Expiry Audit (Threshold: 30 Days)
+POST {{baseUrl}}/api/run/expires
+Content-Type: application/json
+
+{
+  "threshold": 30,
+  "commit": false
+}
+
+### 8. Trigger Full Daily Proxy Pipeline (Updates -> Expires)
+POST {{baseUrl}}/api/run/pipeline

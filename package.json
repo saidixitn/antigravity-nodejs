@@ -11,6 +11,8 @@
   "scripts": {
     "start": "node cli.js serve",
     "serve": "node cli.js serve",
+    "dev": "node --watch cli.js serve",
+    "dev:pretty": "node --watch cli.js serve | npx pino-pretty",
     "views": "node cli.js views",
     "updates": "node cli.js updates",
     "expires": "node cli.js expires",
