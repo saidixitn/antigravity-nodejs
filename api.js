@@ -1,20 +1,25 @@
 /**
- * api.js - High-Performance REST API Microservice
- * ===============================================
+ * api.js - High-Performance REST API Microservice & Command Center
+ * ===============================================================
  * Provides simple, fast REST API endpoints for dashboards, webhooks,
- * and automated cron triggers across all multi-tenant databases.
+ * Google for Jobs schema validation, GPD audits, and automated triggers.
  */
 
 import express from "express";
 import cors from "cors";
 import mongo from "./core/mongo.js";
-import { env } from "./core/auth.js";
+import { env, loadClientsConfig } from "./core/auth.js";
 import logger from "./core/logger.js";
 import { runViewsReport } from "./scripts/views.js";
 import { runUpdates } from "./scripts/updates.js";
 import { runExpires } from "./scripts/expires.js";
 import { runPipeline } from "./scripts/pipeline.js";
 import { runFeedReconciliation } from "./scripts/feed.js";
+import { runWhatJobsSync, runJobGetSync, runBananaSync, runAllRevenue } from "./scripts/revenue.js";
+import { runDailyStats, runClicksReport, runToPostCheck } from "./scripts/stats.js";
+import { listGxcCollections, runGxcCompare } from "./scripts/gxc.js";
+import { runGpdAudit, runGpdClean } from "./scripts/gpd.js";
+import { cleanJobDescription, validateJobPostingSchema } from "./core/gfjSchema.js";
 
 const app = express();
 app.use(cors());
@@ -48,21 +53,21 @@ app.get("/health", async (req, res) => {
   }
 });
 
-// 2. Measure ping latency to any database cluster
+// 2. Measure database latency
 app.get("/api/ping/:db", async (req, res) => {
   const { db } = req.params;
   try {
     const latency = await mongo.ping(db);
-    res.json({ database: db, latencyMs: latency, status: "connected" });
+    res.json({ database: db, latencyMs: latency, reachable: true });
   } catch (err) {
-    res.status(500).json({ database: db, status: "error", error: err.message });
+    res.status(500).json({ database: db, reachable: false, error: err.message });
   }
 });
 
-// 3. List multi-tenant databases from creds registry
-app.get("/api/clients", async (req, res) => {
+// 3. List multi-tenant clients
+app.get("/api/clients", (req, res) => {
   try {
-    const clients = await mongo.listClients();
+    const clients = loadClientsConfig();
     res.json({ count: clients.length, clients });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -79,41 +84,111 @@ app.get("/api/feed/summary", async (req, res) => {
   }
 });
 
-// 5. Trigger Monthly Views report
+// 5. GPD Quality Audit & Cleaning
+app.post("/api/run/gpd/audit", async (req, res) => {
+  try {
+    const report = await runGpdAudit({ client: req.body.client, limit: req.body.limit });
+    res.json({ success: true, count: report.length, data: report });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/api/run/gpd/clean", async (req, res) => {
+  try {
+    const result = await runGpdClean({ client: req.body.client, commit: req.body.commit === true });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 6. Schema Cleaning & Validation Helper
+app.post("/api/schema/validate", (req, res) => {
+  const { title, description } = req.body;
+  if (!title || !description) {
+    return res.status(400).json({ error: "title and description are required" });
+  }
+  const cleaned = cleanJobDescription(description);
+  const validation = validateJobPostingSchema({ title, description: cleaned, datePosted: new Date() });
+  res.json({ cleaned, validation });
+});
+
+// 7. GXC Feed Operations
+app.get("/api/gxc/collections", async (req, res) => {
+  try {
+    const cols = await listGxcCollections();
+    res.json({ count: cols.length, collections: cols });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/run/gxc/compare", async (req, res) => {
+  try {
+    const results = await runGxcCompare({ company: req.body.company });
+    res.json({ success: true, data: results });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 8. Stats & Clicks Operations
+app.post("/api/run/stats/daily", async (req, res) => {
+  try {
+    const results = await runDailyStats();
+    res.json({ success: true, data: results });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/api/run/stats/clicks", async (req, res) => {
+  try {
+    const results = await runClicksReport({ days: req.body.days || 7 });
+    res.json({ success: true, data: results });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 9. Revenue Operations
+app.post("/api/run/revenue/:source", async (req, res) => {
+  const { source } = req.params;
+  try {
+    let result;
+    if (source === "whatjobs") result = await runWhatJobsSync(req.body);
+    else if (source === "jobget") result = await runJobGetSync(req.body);
+    else if (source === "banana") result = await runBananaSync(req.body);
+    else if (source === "all") result = await runAllRevenue(req.body);
+    else return res.status(400).json({ error: "Invalid source: use whatjobs, jobget, banana, all" });
+
+    res.json({ success: true, source, data: result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 10. Operational Pipelines
 app.post("/api/run/views", async (req, res) => {
   const lead = req.query.lead || req.body.lead || "tarun";
   res.json({ message: `Triggered Views Report for lead '${lead}' in background.` });
-
-  runViewsReport(lead).catch((err) => {
-    logger.error("Background Views Report failed", err);
-  });
+  runViewsReport(lead).catch((err) => logger.error("Background Views failed", err));
 });
 
-// 6. Trigger Proxy Sliding Updates
 app.post("/api/run/updates", async (req, res) => {
   res.json({ message: "Triggered Proxy Sliding Updates in background." });
-
-  runUpdates().catch((err) => {
-    logger.error("Background Updates failed", err);
-  });
+  runUpdates().catch((err) => logger.error("Background Updates failed", err));
 });
 
-// 7. Trigger Zero-Click Expires
 app.post("/api/run/expires", async (req, res) => {
   res.json({ message: "Triggered Zero-Click Expires in background." });
-
-  runExpires().catch((err) => {
-    logger.error("Background Expires failed", err);
-  });
+  runExpires().catch((err) => logger.error("Background Expires failed", err));
 });
 
-// 8. Trigger Full Daily Pipeline
 app.post("/api/run/pipeline", async (req, res) => {
   res.json({ message: "Triggered Daily Proxy Pipeline in background." });
-
-  runPipeline().catch((err) => {
-    logger.error("Background Pipeline failed", err);
-  });
+  runPipeline().catch((err) => logger.error("Background Pipeline failed", err));
 });
 
 const PORT = env.port || 4000;

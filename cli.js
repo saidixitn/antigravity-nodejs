@@ -1,11 +1,15 @@
 #!/usr/bin/env node
 /**
- * cli.js - Unified CLI Operations Runner
- * =====================================
+ * cli.js - Unified CLI Operations Runner & Command Center
+ * ========================================================
  * Run any multi-tenant task directly from terminal or cron:
  *   node cli.js views --lead tarun
- *   node cli.js updates
- *   node cli.js expires
+ *   node cli.js gpd audit [--client <name>]
+ *   node cli.js gpd clean [--client <name>] [--commit]
+ *   node cli.js revenue <whatjobs|jobget|banana|all>
+ *   node cli.js stats <daily|clicks|topost>
+ *   node cli.js gxc <compare|list> [--company <name>]
+ *   node cli.js client <qrm|hcsg>
  *   node cli.js feed
  *   node cli.js pipeline
  *   node cli.js ping prod_jobiak_ai
@@ -19,12 +23,18 @@ import { runUpdates } from "./scripts/updates.js";
 import { runExpires } from "./scripts/expires.js";
 import { runFeedReconciliation } from "./scripts/feed.js";
 import { runPipeline } from "./scripts/pipeline.js";
+import { runWhatJobsSync, runJobGetSync, runBananaSync, runAllRevenue } from "./scripts/revenue.js";
+import { runDailyStats, runClicksReport, runToPostCheck } from "./scripts/stats.js";
+import { listGxcCollections, runGxcCompare } from "./scripts/gxc.js";
+import { runQrmAudit, runHcsgAudit } from "./scripts/clientFixer.js";
+import { runGpdAudit, runGpdClean } from "./scripts/gpd.js";
+import { cleanJobDescription, validateJobPostingSchema } from "./core/gfjSchema.js";
 
 const program = new Command();
 
 program
-  .name("jobiak-ops")
-  .description("High-Performance Multi-Tenant MongoDB Operations CLI")
+  .name("antigravity-nodejs")
+  .description("High-Performance Multi-Tenant Operations & Command Center")
   .version("1.0.0");
 
 // 1. Views
@@ -65,7 +75,7 @@ program
     }
   });
 
-// 4. Feed
+// 4. Feed Reconciliation
 program
   .command("feed")
   .description("Reconcile XML feed / staging vs production posted jobs")
@@ -78,7 +88,7 @@ program
     }
   });
 
-// 5. Pipeline
+// 5. Daily Pipeline
 program
   .command("pipeline")
   .description("Run daily proxy pipeline (updates -> expires)")
@@ -86,7 +96,143 @@ program
     await runPipeline();
   });
 
-// 6. Ping
+// 6. GPD Operations (Google Programmatic Distribution)
+program
+  .command("gpd <action>")
+  .description("GPD Quality & Description Hygiene: audit, clean")
+  .option("-c, --client <name>", "Filter by client name")
+  .option("--commit", "Persist cleaned descriptions to database")
+  .action(async (action, opts) => {
+    try {
+      const act = action.toLowerCase();
+      if (act === "audit") {
+        const res = await runGpdAudit({ client: opts.client });
+        console.table(res);
+      } else if (act === "clean") {
+        const res = await runGpdClean({ client: opts.client, commit: opts.commit === true });
+        console.log(res);
+      } else {
+        console.error(`Unknown GPD action: ${action}. Use: audit, clean`);
+      }
+    } finally {
+      await mongo.close();
+    }
+  });
+
+// 7. Schema Test Validator
+program
+  .command("schema:validate <title> <description>")
+  .description("Test description cleaning & Google for Jobs schema compliance")
+  .action((title, desc) => {
+    const cleaned = cleanJobDescription(desc);
+    const validation = validateJobPostingSchema({ title, description: cleaned, datePosted: new Date(), company: "Test Co" });
+    console.log("\n=== Cleaned Description ===");
+    console.log(cleaned);
+    console.log("\n=== Schema Compliance Report ===");
+    console.log(`Score: ${validation.score}% | Valid: ${validation.valid}`);
+    if (validation.warnings.length) console.log("Warnings:", validation.warnings);
+    if (validation.errors.length) console.log("Errors:", validation.errors);
+  });
+
+// 8. Revenue Operations (WhatJobs, JobGet, Banana)
+program
+  .command("revenue <action>")
+  .description("Execute partner revenue sync: whatjobs, jobget, banana, all")
+  .action(async (action) => {
+    try {
+      const act = action.toLowerCase();
+      if (act === "whatjobs") {
+        const res = await runWhatJobsSync();
+        console.table(res);
+      } else if (act === "jobget") {
+        const res = await runJobGetSync();
+        console.log(res);
+      } else if (act === "banana") {
+        const res = await runBananaSync();
+        console.log(res);
+      } else if (act === "all") {
+        const res = await runAllRevenue();
+        console.log(res);
+      } else {
+        console.error(`Unknown revenue action: ${action}. Use: whatjobs, jobget, banana, all`);
+      }
+    } finally {
+      await mongo.close();
+    }
+  });
+
+// 9. Stats & Clicks Telemetry
+program
+  .command("stats <action>")
+  .description("Query cluster stats & clicks: daily, clicks, topost")
+  .option("-d, --days <days>", "Trend window days (default: 7)", "7")
+  .action(async (action, opts) => {
+    try {
+      const act = action.toLowerCase();
+      if (act === "daily") {
+        const res = await runDailyStats();
+        console.table(res.clients);
+      } else if (act === "clicks") {
+        const res = await runClicksReport({ days: parseInt(opts.days, 10) });
+        console.table(res.records);
+      } else if (act === "topost") {
+        const res = await runToPostCheck();
+        console.table(res);
+      } else {
+        console.error(`Unknown stats action: ${action}. Use: daily, clicks, topost`);
+      }
+    } finally {
+      await mongo.close();
+    }
+  });
+
+// 10. GXC Feed Intelligence
+program
+  .command("gxc <action>")
+  .description("GXC syndication feed operations: list, compare")
+  .option("-c, --company <name>", "Filter by company name/regex (default: uber|doordash|albertsons...)")
+  .action(async (action, opts) => {
+    try {
+      const act = action.toLowerCase();
+      if (act === "list") {
+        const cols = await listGxcCollections();
+        console.log(`Found ${cols.length} collections:`);
+        cols.slice(0, 30).forEach((c) => console.log(" ", c));
+        if (cols.length > 30) console.log(` ... and ${cols.length - 30} more.`);
+      } else if (act === "compare") {
+        const res = await runGxcCompare({ company: opts.company });
+        console.table(res.results.slice(0, 40));
+        console.log(`\nMatched ${res.totalTitlesFound} total title groups across ${res.matchedFeedsCount} feeds.`);
+      } else {
+        console.error(`Unknown GXC action: ${action}. Use: list, compare`);
+      }
+    } finally {
+      await mongo.close();
+    }
+  });
+
+// 11. Client Operations & Fixers
+program
+  .command("client <clientName>")
+  .description("Run client-specific diagnostics and scrubbing: qrm, hcsg")
+  .action(async (clientName) => {
+    try {
+      const name = clientName.toLowerCase();
+      if (name === "qrm") {
+        const res = await runQrmAudit();
+        console.log(res);
+      } else if (name === "hcsg") {
+        const res = await runHcsgAudit();
+        console.log(res);
+      } else {
+        console.error(`Unknown client: ${clientName}. Available: qrm, hcsg`);
+      }
+    } finally {
+      await mongo.close();
+    }
+  });
+
+// 12. Ping
 program
   .command("ping <dbName>")
   .description("Measure latency to any MongoDB database cluster")
@@ -101,7 +247,7 @@ program
     }
   });
 
-// 7. Serve
+// 13. Serve API
 program
   .command("serve")
   .description("Start the REST API server")

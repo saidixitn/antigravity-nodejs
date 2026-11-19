@@ -1,9 +1,7 @@
 ### =============================================================================
-### Antigravity Node.js - Localhost API Testing (REST Client)
+### Antigravity Node.js - Localhost Command Center & API Testing
 ### =============================================================================
-### Instructions:
-### In VS Code / Antigravity with the "REST Client" extension installed,
-### click "Send Request" above any block to execute the request immediately.
+### Click "Send Request" above any block to execute against your localhost server.
 ### =============================================================================
 
 @baseUrl = http://localhost:4000
@@ -17,33 +15,60 @@ GET {{baseUrl}}/api/ping/prod_jobiak_ai
 ### 3. List All Configured Multi-Tenant Clients
 GET {{baseUrl}}/api/clients
 
-### 4. Trigger Feed Reconciliation (Dry-run or Audit)
-GET {{baseUrl}}/api/feed/summary
-
-### 5. Trigger Monthly Unique Views Report (Tarun's Portfolio)
-POST {{baseUrl}}/api/run/views
+### 4. GPD Quality Audit (Checks leading timestamps, stray dots, schema readiness)
+POST {{baseUrl}}/api/run/gpd/audit
 Content-Type: application/json
 
 {
-  "lead": "tarun"
+  "client": "YES! Communities",
+  "limit": 100
 }
 
-### 6. Trigger Sliding-Window Job Updates (7 Days)
-POST {{baseUrl}}/api/run/updates
+### 5. GPD Description Sanitizer (Dry-run: commit=false)
+POST {{baseUrl}}/api/run/gpd/clean
+Content-Type: application/json
+
+{
+  "client": "YES! Communities",
+  "commit": false
+}
+
+### 6. Interactive Schema Cleaning & Google for Jobs Compliance Test
+POST {{baseUrl}}/api/schema/validate
+Content-Type: application/json
+
+{
+  "title": "Grounds Keeper / Maintenance Tech",
+  "description": "Posted Wednesday, August 26, 2026, 4:00 AM <p><strong>.</strong></p><p>We are seeking a dedicated Grounds Keeper. Visit yescommunities.com/careers directly for confirmed position openings.</p>8401 E Saddlebrook Dr, Charleston SC"
+}
+
+### 7. GXC Feed Operations - List All Syndication Collections
+GET {{baseUrl}}/api/gxc/collections
+
+### 8. GXC Feed Intelligence - Cross-Feed Comparison (DoorDash, Uber, etc.)
+POST {{baseUrl}}/api/run/gxc/compare
+Content-Type: application/json
+
+{
+  "company": "doordash|uber"
+}
+
+### 9. Daily Cluster Stats (Active vs Inactive vs Total Inventory)
+POST {{baseUrl}}/api/run/stats/daily
+
+### 10. Clicks & Telemetry Report (Past 7 Days)
+POST {{baseUrl}}/api/run/stats/clicks
 Content-Type: application/json
 
 {
   "days": 7
 }
 
-### 7. Trigger Zero-Click Expiry Audit (Threshold: 30 Days)
-POST {{baseUrl}}/api/run/expires
-Content-Type: application/json
+### 11. WhatJobs Revenue & Inventory Sync
+POST {{baseUrl}}/api/run/revenue/whatjobs
 
-{
-  "threshold": 30,
-  "commit": false
-}
+### 12. Trigger Feed Reconciliation (Staging Target_P4_Opt vs Production Posted)
+GET {{baseUrl}}/api/feed/summary
 
-### 8. Trigger Full Daily Proxy Pipeline (Updates -> Expires)
+### 13. Trigger Full Daily Proxy Pipeline (Updates -> Expires)
 POST {{baseUrl}}/api/run/pipeline
