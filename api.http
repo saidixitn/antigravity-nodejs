@@ -1,102 +1,69 @@
 ### =============================================================================
-### Antigravity Node.js - Localhost Command Center & API Testing
+### Antigravity Node.js - Localhost Command Center (Port 4000)
 ### =============================================================================
-### Click "Send Request" above any block to execute against your localhost server.
+### Click "Send Request" above any block to execute immediately in VS Code.
 ### =============================================================================
 
 @baseUrl = http://localhost:4000
 
-### 1. Health Check & Primary Mongo Cluster Latency
+### 1. Health Check & Cluster Ping Latency
 GET {{baseUrl}}/health
 
-### 2. Measure Round-Trip Latency to Any Tenant Database
-GET {{baseUrl}}/api/ping/prod_jobiak_ai
+### 2. Dynamic MongoDB URI Lookup from mongo_creds.creds (Zero Hardcoded IPs)
+GET {{baseUrl}}/api/uri/prod_jobiak_ai
 
-### 3. List All Configured Multi-Tenant Clients
+### 3. Dynamic MongoDB URI Lookup for generateXml_prod
+GET {{baseUrl}}/api/uri/generateXml_prod
+
+### 4. List Configured Multi-Tenant Clients
 GET {{baseUrl}}/api/clients
 
-### 4. GPD Quality Audit (Checks leading timestamps, stray dots, schema readiness)
-POST {{baseUrl}}/api/run/gpd/audit
-Content-Type: application/json
+### =============================================================================
+### DEDICATED PARTNER ENGINES (COMPLETELY SEPARATED)
+### =============================================================================
 
-{
-  "client": "YES! Communities",
-  "limit": 100
-}
+### 5. Daily Stats Engine (Reads daily_stats.input -> daily_stats.output)
+POST {{baseUrl}}/api/dailystats
 
-### 5. GPD Description Sanitizer (Dry-run: commit=false)
-POST {{baseUrl}}/api/run/gpd/clean
-Content-Type: application/json
+### 6. WhatJobs URL-Matching & Revenue Sync
+POST {{baseUrl}}/api/whatjobs
 
-{
-  "client": "YES! Communities",
-  "commit": false
-}
+### 7. JobGet Publisher CPA & CPC Sync
+POST {{baseUrl}}/api/jobget
 
-### 6. Interactive Schema Cleaning & Google for Jobs Compliance Test
-POST {{baseUrl}}/api/schema/validate
-Content-Type: application/json
+### 8. Banana Aggregator Syndication Snapshot
+POST {{baseUrl}}/api/banana
 
-{
-  "title": "Grounds Keeper / Maintenance Tech",
-  "description": "Posted Wednesday, August 26, 2026, 4:00 AM <p><strong>.</strong></p><p>We are seeking a dedicated Grounds Keeper. Visit yescommunities.com/careers directly for confirmed position openings.</p>8401 E Saddlebrook Dr, Charleston SC"
-}
+### =============================================================================
+### OPERATIONAL PIPELINES
+### =============================================================================
 
-### 7. GXC Feed Operations - List All Syndication Collections
-GET {{baseUrl}}/api/gxc/collections
+### 9. Monthly Google Views Report for Google Sheets (Tarun)
+POST {{baseUrl}}/api/views?lead=tarun
 
-### 8. GXC Feed Intelligence - Cross-Feed Comparison (DoorDash, Uber, etc.)
-POST {{baseUrl}}/api/run/gxc/compare
-Content-Type: application/json
+### 10. Proxy Sliding-Window Updates
+POST {{baseUrl}}/api/updates
 
-{
-  "company": "doordash|uber"
-}
+### 11. Zero-Click Expiry Audit
+POST {{baseUrl}}/api/expires
 
-### 9. Daily Cluster Stats (Active vs Inactive vs Total Inventory)
-POST {{baseUrl}}/api/run/stats/daily
+### 12. Feed Reconciliation (Staging vs Production)
+POST {{baseUrl}}/api/feed
 
-### 10. Clicks & Telemetry Report (Past 7 Days)
-POST {{baseUrl}}/api/run/stats/clicks
-Content-Type: application/json
-
-{
-  "days": 7
-}
-
-### 11. WhatJobs Revenue & Inventory Sync
-POST {{baseUrl}}/api/run/revenue/whatjobs
-
-### 12. Trigger Feed Reconciliation (Staging Target_P4_Opt vs Production Posted)
-GET {{baseUrl}}/api/feed/summary
-
-### 13. Trigger Full Daily Proxy Pipeline (Updates -> Expires)
-POST {{baseUrl}}/api/run/pipeline
-
-
-### 14. Duplicate Job Clustering & Cannibalization Prevention (Concentrix)
-POST {{baseUrl}}/api/run/dedup
-Content-Type: application/json
-
-{
-  "client": "Concentrix",
-  "limit": 500
-}
-
-### 15. Googlebot Crawl vs View Bottleneck Analyzer (HCSG)
-POST {{baseUrl}}/api/run/audit/indexing
+### 13. Pre-Posting Ingestion Collision Gate (HCSG)
+POST {{baseUrl}}/api/collision
 Content-Type: application/json
 
 {
   "client": "HCSG",
-  "limit": 100
+  "limit": 1000
 }
 
-### 16. Location Keywords Expansion (HCSG)
-POST {{baseUrl}}/api/run/keywords/expand
+### 14. Description HTML Cleaner (Strips Timestamps, Stray Dots, Apply Leaks)
+POST {{baseUrl}}/api/clean
 Content-Type: application/json
 
 {
-  "client": "HCSG",
-  "limit": 50
+  "title": "Dietary Aide",
+  "description": "Posted Wednesday, August 26, 2026, 4:00 AM <p><strong>.</strong></p><p>Great job opportunity. Visit yescommunities.com/careers directly for confirmed position openings.</p>8401 E Saddlebrook Dr, Charleston SC"
 }

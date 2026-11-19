@@ -1,37 +1,75 @@
 /**
- * mongo.js - Dynamic Multi-Tenant MongoDB Engine
- * ===============================================
- * Auto-resolves cluster connection strings from mongo_creds.creds on the central
- * hub, maintains high-performance connection pools, and tracks latency health.
+ * mongo.js - Dynamic Multi-Tenant MongoDB Engine (Local + Remote)
+ * ==============================================================
+ * Connects to:
+ * 1. Localhost MongoDB (127.0.0.1:27017) by default for fast, zero-load local operations.
+ * 2. Remote VPS Clusters dynamically via URI discovery in mongo_creds.creds (NO hardcoded IPs).
+ * 3. Connection pools are cached in memory to eliminate socket leaks and CPU load.
  */
 
 import { MongoClient } from "mongodb";
 import { env } from "./auth.js";
 import logger from "./logger.js";
 
+const LOCAL_URI = process.env.LOCAL_MONGO_URI || "mongodb://127.0.0.1:27017";
+
 class MongoEngine {
   constructor() {
     this.pools = new Map();     // URI -> MongoClient
-    this.dbMap = new Map();     // dbName -> Db
+    this.dbMap = new Map();     // cacheKey -> Db
+    this.localClient = null;
     this.rootClient = null;
     this.latencyMap = new Map(); // dbName -> ping ms
   }
 
   /**
-   * Connects to the Central Mongo Hub via MONGO_URI
+   * Fast connection to Localhost MongoDB (127.0.0.1:27017)
+   */
+  async getLocal() {
+    if (this.localClient) return this.localClient;
+
+    try {
+      const client = new MongoClient(LOCAL_URI, {
+        maxPoolSize: 20,
+        minPoolSize: 1,
+        connectTimeoutMS: 5000,
+        socketTimeoutMS: 15000,
+      });
+
+      await client.connect();
+      this.localClient = client;
+      this.pools.set("LOCAL", client);
+      return this.localClient;
+    } catch (err) {
+      logger.warn(`Local MongoDB not accessible on ${LOCAL_URI}: ${err.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Get direct handle to a local database on 127.0.0.1:27017
+   */
+  async localDb(dbName) {
+    const local = await this.getLocal();
+    if (!local) throw new Error(`Cannot connect to local MongoDB on ${LOCAL_URI}`);
+    return local.db(dbName);
+  }
+
+  /**
+   * Connects to Central Mongo Hub (Remote / Root)
    */
   async getRoot() {
     if (this.rootClient) return this.rootClient;
 
     if (!env.mongoUri) {
-      throw new Error("MONGO_URI is missing from environment.");
+      throw new Error("MONGO_URI is missing from environment (.env).");
     }
 
     try {
       const client = new MongoClient(env.mongoUri, {
-        maxPoolSize: env.maxPoolSize,
-        minPoolSize: env.minPoolSize,
-        connectTimeoutMS: 20000,
+        maxPoolSize: env.maxPoolSize || 10,
+        minPoolSize: env.minPoolSize || 1,
+        connectTimeoutMS: 15000,
         socketTimeoutMS: 45000,
       });
 
@@ -48,71 +86,102 @@ class MongoEngine {
   }
 
   /**
-   * Resolves database handle dynamically with connection pooling
+   * Dynamic URI Resolver from mongo_creds.creds (NO hardcoded IPs!)
    */
-  async db(dbName) {
-    if (this.dbMap.has(dbName)) {
-      return this.dbMap.get(dbName);
+  async getUri(domainName) {
+    // 1. Check local mongo_creds first (if local mongo is running)
+    try {
+      const local = await this.getLocal();
+      if (local) {
+        const doc = await local.db("mongo_creds").collection("creds").findOne({ domain: domainName });
+        if (doc && (doc.mongo_uri || doc.uri)) return doc.mongo_uri || doc.uri;
+      }
+    } catch {
+      // Ignore and proceed to root
     }
 
+    // 2. Query Central Mongo Hub mongo_creds.creds
     const root = await this.getRoot();
+    const credsCol = root.db("mongo_creds").collection("creds");
+    const doc = await credsCol.findOne({ domain: domainName });
+    if (doc && (doc.mongo_uri || doc.uri)) {
+      return doc.mongo_uri || doc.uri;
+    }
 
-    // Databases hosted directly on the central hub
+    return null;
+  }
+
+  /**
+   * Resolves a database handle with automatic pooling and caching
+   * @param {string} dbName
+   * @param {object} options { preferLocal: boolean }
+   */
+  async db(dbName, options = {}) {
+    const cacheKey = `${options.preferLocal ? "LOCAL:" : "REMOTE:"}${dbName}`;
+    if (this.dbMap.has(cacheKey)) {
+      return this.dbMap.get(cacheKey);
+    }
+
+    // If preferLocal or LOCAL_DOMAIN_MONGOS is true, check local MongoDB
+    if (options.preferLocal || process.env.LOCAL_DOMAIN_MONGOS === "true") {
+      const local = await this.getLocal();
+      if (local) {
+        const database = local.db(dbName);
+        this.dbMap.set(cacheKey, database);
+        return database;
+      }
+    }
+
+    // Central hub hosted databases
     const hubDbs = [
       "mongo_creds", "google_creds", "daily_stats", "daily_domain_stats",
       "Clicks_Report", "domain_expires", "domain_postings", "xml_timings",
       "banana_analytics", "GenAI", "GSC", "surveys_prod", "XML", "dc_prod", "proxy_stats"
     ];
 
+    const root = await this.getRoot();
+
     if (hubDbs.includes(dbName)) {
       const database = root.db(dbName);
-      this.dbMap.set(dbName, database);
+      this.dbMap.set(cacheKey, database);
       return database;
     }
 
     // Dynamic routing lookup in mongo_creds.creds
-    const credsCol = root.db("mongo_creds").collection("creds");
-    const credDoc = await credsCol.findOne({ domain: dbName });
-
-    if (!credDoc) {
+    const targetUri = await this.getUri(dbName);
+    if (!targetUri) {
       logger.warn(`No credential record for '${dbName}' in mongo_creds.creds; falling back to root hub.`);
       const fallback = root.db(dbName);
-      this.dbMap.set(dbName, fallback);
+      this.dbMap.set(cacheKey, fallback);
       return fallback;
     }
 
-    const uri = credDoc.mongo_uri || credDoc.uri;
-    if (!uri) {
-      throw new Error(`Credential document for '${dbName}' lacks 'mongo_uri' or 'uri'.`);
-    }
-
     // Reuse existing pool if another DB shares this cluster URI
-    if (this.pools.has(uri)) {
-      const client = this.pools.get(uri);
+    if (this.pools.has(targetUri)) {
+      const client = this.pools.get(targetUri);
       const database = client.db(dbName);
-      this.dbMap.set(dbName, database);
+      this.dbMap.set(cacheKey, database);
       return database;
     }
 
-    // Establish new pool for target cluster
+    // Establish new cached pool for target cluster
     try {
-      const client = new MongoClient(uri, {
-        maxPoolSize: env.maxPoolSize,
-        minPoolSize: env.minPoolSize,
-        connectTimeoutMS: 20000,
+      const client = new MongoClient(targetUri, {
+        maxPoolSize: env.maxPoolSize || 10,
+        minPoolSize: env.minPoolSize || 1,
+        connectTimeoutMS: 15000,
         socketTimeoutMS: 45000,
       });
 
       const start = Date.now();
       await client.connect();
-      await client.db("admin").command({ ping: 1 });
       const latency = Date.now() - start;
 
-      this.pools.set(uri, client);
+      this.pools.set(targetUri, client);
       this.latencyMap.set(dbName, latency);
 
       const database = client.db(dbName);
-      this.dbMap.set(dbName, database);
+      this.dbMap.set(cacheKey, database);
       logger.info(`Pool established for '${dbName}'`, `${latency}ms latency`);
       return database;
     } catch (err) {
@@ -122,54 +191,44 @@ class MongoEngine {
   }
 
   /**
-   * One-liner to get a collection from any database
-   */
-  async col(dbName, colName) {
-    const database = await this.db(dbName);
-    return database.collection(colName);
-  }
-
-  /**
-   * Measures ping latency in milliseconds
+   * Ping database cluster latency
    */
   async ping(dbName) {
+    const targetDb = await this.db(dbName);
     const start = Date.now();
-    const database = await this.db(dbName);
-    await database.command({ ping: 1 });
-    const latency = Date.now() - start;
-    this.latencyMap.set(dbName, latency);
-    return latency;
+    await targetDb.command({ ping: 1 });
+    return Date.now() - start;
   }
 
   /**
-   * Lists all available tenant databases registered on the hub
-   */
-  async listClients() {
-    const root = await this.getRoot();
-    const credsCol = root.db("mongo_creds").collection("creds");
-    return credsCol
-      .find({}, { projection: { domain: 1, ping_latency_ms: 1, last_checked: 1, _id: 0 } })
-      .sort({ domain: 1 })
-      .toArray();
-  }
-
-  /**
-   * Closes all connection pools gracefully
+   * Graceful cleanup of all open client pools
    */
   async close() {
     for (const [key, client] of this.pools.entries()) {
       try {
         await client.close();
-      } catch (e) {
-        // ignore
+      } catch {
+        // Ignore
       }
     }
     this.pools.clear();
     this.dbMap.clear();
     this.rootClient = null;
+    this.localClient = null;
     logger.info("Connection pools closed cleanly");
   }
 }
 
-export const mongo = new MongoEngine();
+const mongo = new MongoEngine();
+
+process.on("SIGINT", async () => {
+  await mongo.close();
+  process.exit(0);
+});
+
+process.on("SIGTERM", async () => {
+  await mongo.close();
+  process.exit(0);
+});
+
 export default mongo;
