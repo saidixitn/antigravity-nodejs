@@ -1,0 +1,9 @@
+[
+  {
+    "name": "CLIENT_NAME_1",
+    "domain": "example.com",
+    "type": "Proxy",
+    "employerId": "YOUR_EMPLOYER_ID_HERE",
+    "jobicareEmployerId": "emp-jicn-example"
+  }
+]

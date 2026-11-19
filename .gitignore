@@ -1,0 +1,24 @@
+# Environment, Secrets & Credentials
+.env
+*.env
+*.env.local
+credentials.json
+*_credentials.json
+clients.json
+config/clients.json
+secrets/
+*.secret.json
+
+# Dependencies
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+
+# Logs & Runtime Cache
+*.log
+logs/
+pm2/logs/
+expiry_run_cache/
+.DS_Store
+Thumbs.db

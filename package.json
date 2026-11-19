@@ -1,0 +1,33 @@
+{
+  "name": "antigravity-nodejs",
+  "version": "1.0.0",
+  "description": "High-Performance Multi-Tenant MongoDB Engine, Pipeline Orchestrator & REST API",
+  "type": "module",
+  "main": "cli.js",
+  "bin": {
+    "antigravity-nodejs": "./cli.js",
+    "jobiak-ops": "./cli.js"
+  },
+  "scripts": {
+    "start": "node cli.js serve",
+    "serve": "node cli.js serve",
+    "views": "node cli.js views",
+    "updates": "node cli.js updates",
+    "expires": "node cli.js expires",
+    "feed": "node cli.js feed",
+    "pipeline": "node cli.js pipeline"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "googleapis": "^144.0.0",
+    "mongodb": "^6.10.0",
+    "nodemailer": "^6.9.16",
+    "p-limit": "^6.1.0",
+    "p-retry": "^6.2.0",
+    "pino": "^9.5.0",
+    "pino-pretty": "^13.0.0"
+  }
+}
