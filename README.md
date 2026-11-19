@@ -67,10 +67,13 @@ antigravity-nodejs/
 ├── pm2/
 │   └── ecosystem.config.cjs   # PM2 configuration for VPS daemons
 └── docs/                      # In-depth architectural & operational specs
+    ├── GEMINI.md              # Master LLM-grade search engineering manual & knowledge base
     ├── ENTERPRISE_SYSTEM_MANUAL.md
     ├── MASTER_PLAYBOOK.md
     └── ARCHITECTURE.md
 ```
+
+> 📖 **Full Engineering Knowledge Base**: Read [docs/GEMINI.md](docs/GEMINI.md) for the complete LLM-grade reference on multi-tenant MongoDB routing, exact production schemas, bot filters, indexing hints, and partner reconciliation.
 
 ---
 
