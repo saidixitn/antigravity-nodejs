@@ -72,3 +72,31 @@ GET {{baseUrl}}/api/feed/summary
 
 ### 13. Trigger Full Daily Proxy Pipeline (Updates -> Expires)
 POST {{baseUrl}}/api/run/pipeline
+
+
+### 14. Duplicate Job Clustering & Cannibalization Prevention (Concentrix)
+POST {{baseUrl}}/api/run/dedup
+Content-Type: application/json
+
+{
+  "client": "Concentrix",
+  "limit": 500
+}
+
+### 15. Googlebot Crawl vs View Bottleneck Analyzer (HCSG)
+POST {{baseUrl}}/api/run/audit/indexing
+Content-Type: application/json
+
+{
+  "client": "HCSG",
+  "limit": 100
+}
+
+### 16. Location Keywords Expansion (HCSG)
+POST {{baseUrl}}/api/run/keywords/expand
+Content-Type: application/json
+
+{
+  "client": "HCSG",
+  "limit": 50
+}

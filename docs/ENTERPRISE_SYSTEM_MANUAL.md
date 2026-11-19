@@ -311,3 +311,38 @@ pm2 logs jobiak-api
   `title~~city~~state~~country~~company`
   *(e.g. `cook~~dayton~~oh~~us~~group`healthcare`inc`services`)*.
 * **`validThrough`**: The expiration date in `prod_jobiak_ai.job` (ISO 8601).
+
+
+---
+
+## 9. Advanced Intelligence Systems & Optimization Engines
+
+### 9.1 Multi-Alias Analytics Resolver (`core/aliasMap.js`)
+* **The 35% Join Loss Problem**: In `prod_jobiak_ai.userAnalytics`, click and view events can log `childJobId`, `jobId`, `jobPubJobId`, or `clientJobId`. If an analytics query joins strictly on `jobId`, up to 35% of valid Google views are lost!
+* **The Solution**: An in-memory bi-directional alias resolver constructs a comprehensive index across all four identifier fields, ensuring 100% of organic Google impressions and clicks are captured.
+
+### 9.2 Duplicate Clustering & Cannibalization Engine (`scripts/dedup.js`)
+* **Keyword Cannibalization**: When an employer posts multiple active listings for the same role in the exact same city, Google for Jobs splits impression velocity, confusing search rankings and wasting domain crawl budget.
+* **Clustering & Retention Logic**:
+  1. Buckets live jobs by exact normalized location (`city, state`).
+  2. Compares title similarity within the location.
+  3. Evaluates Google views across duplicates:
+     - **Highest Performing Job**: Kept active (`KEEP`).
+     - **Lower Performing Duplicates**: Flagged for expiration (`EXPIRE`).
+* **Command**: `node cli.js dedup Concentrix`
+
+### 9.3 Location Keywords Expansion Engine (`scripts/keywords.js`)
+* **Strict Lowercase Title Rule**: Every keyword `title` in Jobiak collections **MUST be lowercase** (`cook`, `dietary aide`, `housekeeper`, `floor tech`).
+* **Location Template Expansion**: Automatically expands high-converting search patterns:
+  - `"{title} jobs in {city}, {state}"`
+  - `"{title} jobs near {city}, {state}"`
+  - `"{title} hiring near me"`
+  - `"{city} {title} careers"`
+* **Command**: `node cli.js keywords:expand HCSG`
+
+### 9.4 Googlebot Crawl vs View Bottleneck Analyzer (`scripts/indexingAudit.js`)
+* **Diagnostic Triage**: Partitions all active live listings into three actionable buckets:
+  1. **Generating Views**: Active listings winning search impressions and human candidate clicks.
+  2. **Crawled but Zero Clicks**: Googlebot crawled the page, but Google for Jobs chose not to rank it, or searchers did not click. *Focus: Optimize title, add structured salary, clean description snippet.*
+  3. **Never Crawled**: Googlebot has never visited the URL. *Focus: Submit to Google Indexing API and verify sitemap XML.*
+* **Command**: `node cli.js audit:indexing HCSG`

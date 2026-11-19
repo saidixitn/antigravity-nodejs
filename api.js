@@ -20,6 +20,9 @@ import { runDailyStats, runClicksReport, runToPostCheck } from "./scripts/stats.
 import { listGxcCollections, runGxcCompare } from "./scripts/gxc.js";
 import { runGpdAudit, runGpdClean } from "./scripts/gpd.js";
 import { runCollisionCheck } from "./scripts/collision.js";
+import { runDuplicateAudit } from "./scripts/dedup.js";
+import { expandLocationKeywords } from "./scripts/keywords.js";
+import { runIndexingAudit } from "./scripts/indexingAudit.js";
 import { cleanJobDescription, validateJobPostingSchema } from "./core/gfjSchema.js";
 
 const app = express();
@@ -90,6 +93,36 @@ app.post("/api/run/collision", async (req, res) => {
   try {
     const report = await runCollisionCheck(req.body.client, { limit: req.body.limit });
     res.json({ success: true, count: report.length, data: report });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 5b. Duplicate Job Clustering & Cannibalization Prevention
+app.post("/api/run/dedup", async (req, res) => {
+  try {
+    const report = await runDuplicateAudit(req.body.client || "Concentrix", { limit: req.body.limit });
+    res.json({ success: true, data: report });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 5c. Googlebot Crawl vs View Bottleneck Analyzer
+app.post("/api/run/audit/indexing", async (req, res) => {
+  try {
+    const report = await runIndexingAudit(req.body.client || "HCSG", { limit: req.body.limit });
+    res.json({ success: true, data: report });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 5d. Location Keywords Expansion
+app.post("/api/run/keywords/expand", async (req, res) => {
+  try {
+    const report = await expandLocationKeywords(req.body.client || "HCSG", { limit: req.body.limit });
+    res.json({ success: true, data: report });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

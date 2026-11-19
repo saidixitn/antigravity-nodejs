@@ -4,6 +4,9 @@
  * ========================================================
  * Run any multi-tenant task directly from terminal or cron:
  *   node cli.js views --lead tarun
+ *   node cli.js dedup Concentrix
+ *   node cli.js audit:indexing HCSG
+ *   node cli.js keywords:expand HCSG
  *   node cli.js collision [clientName]
  *   node cli.js gpd audit [--client <name>]
  *   node cli.js gpd clean [--client <name>] [--commit]
@@ -31,6 +34,9 @@ import { runQrmAudit, runHcsgAudit } from "./scripts/clientFixer.js";
 import { runGpdAudit, runGpdClean } from "./scripts/gpd.js";
 import { cleanJobDescription, validateJobPostingSchema } from "./core/gfjSchema.js";
 import { runCollisionCheck } from "./scripts/collision.js";
+import { runDuplicateAudit } from "./scripts/dedup.js";
+import { expandLocationKeywords } from "./scripts/keywords.js";
+import { runIndexingAudit } from "./scripts/indexingAudit.js";
 
 const program = new Command();
 
@@ -112,7 +118,54 @@ program
     }
   });
 
-// 7. GPD Operations (Google Programmatic Distribution)
+// 7. Duplicate Job Clustering & Cannibalization Prevention
+program
+  .command("dedup <clientName>")
+  .description("Detect same-city duplicate listings and recommend keep vs expire based on views")
+  .action(async (clientName) => {
+    try {
+      const res = await runDuplicateAudit(clientName);
+      console.log(`Evaluated ${res.evaluatedRecords} duplicate candidates: ${res.keepCount} Keep / ${res.expireCount} Expire`);
+      console.table(res.recommendations.slice(0, 30));
+    } finally {
+      await mongo.close();
+    }
+  });
+
+// 8. Googlebot Crawl vs View Bottleneck Analyzer
+program
+  .command("audit:indexing <clientName>")
+  .description("Audit active jobs: Generating Views vs Crawled Zero Clicks vs Never Crawled")
+  .option("-l, --limit <number>", "Limit active jobs scanned", "1000")
+  .action(async (clientName, opts) => {
+    try {
+      const res = await runIndexingAudit(clientName, { limit: parseInt(opts.limit, 10) });
+      console.log(`Client: ${res.client} (${res.totalActiveAudited} active jobs audited)`);
+      console.table([
+        { Bucket: "Generating Views", Count: res.generatingViews.count, Pct: res.generatingViews.percentage },
+        { Bucket: "Crawled Zero Clicks", Count: res.crawledZeroClicks.count, Pct: res.crawledZeroClicks.percentage },
+        { Bucket: "Never Crawled", Count: res.neverCrawled.count, Pct: res.neverCrawled.percentage },
+      ]);
+    } finally {
+      await mongo.close();
+    }
+  });
+
+// 9. Location Keywords Expansion
+program
+  .command("keywords:expand <clientName>")
+  .description("Generate expanded location keywords adhering to lowercase title rules")
+  .action(async (clientName) => {
+    try {
+      const res = await expandLocationKeywords(clientName);
+      console.log(`Generated ${res.totalKeywordsGenerated} keywords across ${res.sampleJobsUsed} jobs`);
+      console.table(res.sampleOutput.slice(0, 20));
+    } finally {
+      await mongo.close();
+    }
+  });
+
+// 10. GPD Operations (Google Programmatic Distribution)
 program
   .command("gpd <action>")
   .description("GPD Quality & Description Hygiene: audit, clean")
@@ -135,7 +188,7 @@ program
     }
   });
 
-// 8. Schema Test Validator
+// 11. Schema Test Validator
 program
   .command("schema:validate <title> <description>")
   .description("Test description cleaning & Google for Jobs schema compliance")
@@ -150,7 +203,7 @@ program
     if (validation.errors.length) console.log("Errors:", validation.errors);
   });
 
-// 9. Revenue Operations (WhatJobs, JobGet, Banana)
+// 12. Revenue Operations (WhatJobs, JobGet, Banana)
 program
   .command("revenue <action>")
   .description("Execute partner revenue sync: whatjobs, jobget, banana, all")
@@ -177,7 +230,7 @@ program
     }
   });
 
-// 10. Stats & Clicks Telemetry
+// 13. Stats & Clicks Telemetry
 program
   .command("stats <action>")
   .description("Query cluster stats & clicks: daily, clicks, topost")
@@ -202,7 +255,7 @@ program
     }
   });
 
-// 11. GXC Feed Intelligence
+// 14. GXC Feed Intelligence
 program
   .command("gxc <action>")
   .description("GXC syndication feed operations: list, compare")
@@ -227,7 +280,7 @@ program
     }
   });
 
-// 12. Client Operations & Fixers
+// 15. Client Operations & Fixers
 program
   .command("client <clientName>")
   .description("Run client-specific diagnostics and scrubbing: qrm, hcsg")
@@ -248,7 +301,7 @@ program
     }
   });
 
-// 13. Ping
+// 16. Ping
 program
   .command("ping <dbName>")
   .description("Measure latency to any MongoDB database cluster")
@@ -263,7 +316,7 @@ program
     }
   });
 
-// 14. Serve API
+// 17. Serve API
 program
   .command("serve")
   .description("Start the REST API server")
